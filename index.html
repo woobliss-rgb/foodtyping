@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Food Typing Rush</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f0f1a;
+    color: #fff;
+    font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; padding: 20px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 6px; color: #a78bfa; letter-spacing: 2px; }
+  .subtitle { color: #6b7280; font-size: 0.9rem; margin-bottom: 14px; }
+
+  .stats { display: flex; gap: 40px; margin-bottom: 16px; }
+  .stat { text-align: center; }
+  .stat-value { font-size: 2rem; font-weight: bold; color: #a78bfa; }
+  .stat-label { font-size: 0.75rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
+
+  #game-area {
+    width: 700px; height: 370px;
+    background: #1a1a2e;
+    border: 1px solid #2d2d4e; border-radius: 12px;
+    position: relative; overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  /* 낙하 단어 */
+  .word {
+    position: absolute;
+    font-size: 1rem; font-weight: 600;
+    padding: 4px 12px; border-radius: 20px;
+    background: #2d2d4e; color: #c4b5fd;
+    border: 1px solid #4c1d95;
+    white-space: nowrap; pointer-events: none; z-index: 10;
+  }
+  .word.danger {
+    color: #f87171; border-color: #f87171; background: #7f1d1d33;
+    animation: shake 0.3s infinite;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-3px); }
+    75%      { transform: translateX(3px); }
+  }
+
+  /* ── 캐릭터 ── */
+  #character {
+    position: absolute; bottom: 5px; left: 50%;
+    transform: translateX(-50%);
+    width: 78px; height: 78px; z-index: 20;
+  }
+  #character.eating-bounce { animation: char-bounce 0.18s ease-out; }
+  @keyframes char-bounce {
+    0%   { transform: translateX(-50%) scale(1); }
+    40%  { transform: translateX(-50%) scale(1.2, 0.86); }
+    70%  { transform: translateX(-50%) scale(0.9, 1.12); }
+    100% { transform: translateX(-50%) scale(1); }
+  }
+  #character.miss-shake { animation: char-miss 0.35s ease-out; }
+  @keyframes char-miss {
+    0%,100% { transform: translateX(-50%); }
+    25%     { transform: translateX(calc(-50% - 7px)) rotate(-9deg); }
+    75%     { transform: translateX(calc(-50% + 7px)) rotate(9deg); }
+  }
+
+  .char-body {
+    width: 78px; height: 78px;
+    background: radial-gradient(ellipse at 38% 30%, #fef3c7, #fbbf24 52%, #d97706);
+    border-radius: 50%; border: 2.5px solid #b45309;
+    position: relative; overflow: hidden;
+    box-shadow: 0 6px 18px rgba(251,191,36,.35), inset 0 -5px 10px rgba(0,0,0,.15);
+  }
+  .char-eye {
+    position: absolute; width: 11px; height: 14px;
+    background: #111827; border-radius: 50%; top: 21px;
+    transition: height .1s, top .1s, border-radius .1s;
+  }
+  .char-eye.l { left: 15px; }
+  .char-eye.r { right: 15px; }
+  .char-eye::after {
+    content:''; position: absolute;
+    width:4px; height:4px; background:#fff;
+    border-radius:50%; top:2px; left:2px;
+  }
+  #character.eating  .char-eye { height:6px; top:26px; border-radius:50% 50% 0 0; }
+  #character.sad     .char-eye { transform: rotate(12deg); }
+  #character.sad .char-eye.l   { transform: rotate(-12deg); }
+
+  .char-cheek {
+    position: absolute; width:17px; height:10px;
+    background: rgba(251,113,133,.45); border-radius:50%;
+    top:35px; opacity:0; transition:opacity .3s;
+  }
+  .char-cheek.l { left:6px; }
+  .char-cheek.r { right:6px; }
+  #character.combo .char-cheek { opacity:1; }
+
+  .char-sweat {
+    position:absolute; top:-2px; right:4px;
+    font-size:14px; opacity:0; transition:opacity .3s;
+  }
+  #character.danger-mode .char-sweat { opacity:1; animation:sweat .8s infinite; }
+  @keyframes sweat {
+    0%,100% { transform:translateY(0); }
+    50%     { transform:translateY(4px); }
+  }
+
+  .char-mouth-outer {
+    position:absolute; bottom:9px; left:15px;
+    width:48px; height:22px; background:#7f1d1d;
+    border-radius:0 0 24px 24px; overflow:hidden;
+    transition:height .12s ease, bottom .12s ease;
+  }
+  .char-teeth-top {
+    position:absolute; top:0; left:0; right:0;
+    height:8px; background:#f8fafc;
+  }
+  .char-tongue {
+    position:absolute; bottom:3px; left:50%;
+    transform:translateX(-50%);
+    width:22px; height:12px; background:#f43f5e; border-radius:50%;
+  }
+  #character.eating  .char-mouth-outer { height:36px; bottom:5px; }
+  #character.chewing .char-mouth-outer { animation:chew .13s ease-in-out 5; }
+  @keyframes chew { 0%,100%{height:22px;} 50%{height:7px;} }
+  #character.sad .char-mouth-outer {
+    border-radius:24px 24px 0 0; bottom:4px; height:12px; transform:scaleX(.8);
+  }
+
+  /* 말풍선 */
+  #speech-bubble {
+    position:absolute; bottom:88px; left:50%;
+    transform:translateX(-50%);
+    background:#fff; color:#111;
+    font-size:.72rem; font-weight:700;
+    padding:4px 10px; border-radius:12px;
+    white-space:nowrap; z-index:25;
+    opacity:0; transition:opacity .2s; pointer-events:none;
+  }
+  #speech-bubble::after {
+    content:''; position:absolute; bottom:-7px; left:50%;
+    transform:translateX(-50%);
+    border:4px solid transparent; border-top-color:#fff;
+  }
+  #speech-bubble.visible { opacity:1; }
+
+  /* UI */
+  #input-area { display:flex; gap:10px; width:700px; }
+  #word-input {
+    flex:1; padding:14px 20px; font-size:1.2rem;
+    background:#1a1a2e; border:2px solid #4c1d95;
+    border-radius:10px; color:#fff; outline:none;
+    transition:border-color .2s;
+    font-family:'Segoe UI','Apple SD Gothic Neo',sans-serif;
+  }
+  #word-input:focus  { border-color:#a78bfa; }
+  #word-input.correct{ border-color:#34d399; }
+  #word-input.wrong  { border-color:#f87171; }
+
+  #start-btn {
+    padding:14px 28px; background:#7c3aed;
+    border:none; border-radius:10px; color:#fff;
+    font-size:1rem; font-weight:600; cursor:pointer;
+    transition:background .2s;
+  }
+  #start-btn:hover { background:#6d28d9; }
+
+  .controls { display:flex; gap:20px; margin-bottom:14px; align-items:center; }
+  .btn-group { display:flex; gap:8px; }
+  .group-label { color:#6b7280; font-size:.8rem; margin-right:4px; align-self:center; }
+  .diff-btn, .lang-btn {
+    padding:6px 16px; border-radius:20px;
+    border:1px solid #4c1d95; background:transparent;
+    color:#a78bfa; cursor:pointer; font-size:.85rem;
+    font-family:'Segoe UI','Apple SD Gothic Neo',sans-serif;
+    transition:all .2s;
+  }
+  .diff-btn.active,.lang-btn.active,
+  .diff-btn:hover,.lang-btn:hover {
+    background:#7c3aed; color:#fff; border-color:#7c3aed;
+  }
+
+  #overlay {
+    position:absolute; inset:0; background:#0f0f1aee;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    border-radius:12px; z-index:30;
+  }
+  #overlay h2 { font-size:1.6rem; color:#a78bfa; margin-bottom:10px; }
+  #overlay p  { color:#9ca3af; font-size:.95rem; text-align:center; line-height:1.9; }
+  #overlay .result { font-size:1.1rem; color:#c4b5fd; margin-top:10px; }
+
+  .miss-flash {
+    position:absolute; inset:0; background:#f8717133;
+    border-radius:12px; pointer-events:none;
+    opacity:0; transition:opacity .3s; z-index:1;
+  }
+
+  #progress-bar {
+    width:700px; height:4px; background:#2d2d4e;
+    border-radius:2px; margin-bottom:14px; overflow:hidden;
+  }
+  #progress-fill {
+    height:100%;
+    background:linear-gradient(90deg,#7c3aed,#a78bfa);
+    width:100%; transition:width 1s linear;
+  }
+</style>
+</head>
+<body>
+
+<h1>⌨️ FOOD TYPING RUSH</h1>
+<p class="subtitle">음식을 타이핑하면 실제로 변해서 캐릭터가 먹어요! 🍽️</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-value" id="score">0</div><div class="stat-label">Score</div></div>
+  <div class="stat"><div class="stat-value" id="timer">60</div><div class="stat-label">Seconds</div></div>
+  <div class="stat"><div class="stat-value" id="wpm">0</div><div class="stat-label">WPM</div></div>
+  <div class="stat"><div class="stat-value" id="accuracy">100%</div><div class="stat-label">Accuracy</div></div>
+  <div class="stat"><div class="stat-value" id="combo">0</div><div class="stat-label">Combo</div></div>
+</div>
+
+<div class="controls">
+  <span class="group-label">난이도</span>
+  <div class="btn-group">
+    <button class="diff-btn active" onclick="setDifficulty('easy',this)">Easy</button>
+    <button class="diff-btn" onclick="setDifficulty('normal',this)">Normal</button>
+    <button class="diff-btn" onclick="setDifficulty('hard',this)">Hard</button>
+    <button class="diff-btn" onclick="setDifficulty('expert',this)">Expert</button>
+  </div>
+  <span class="group-label" style="margin-left:12px;">언어</span>
+  <div class="btn-group">
+    <button class="lang-btn" onclick="setLanguage('en',this)">🇺🇸 EN</button>
+    <button class="lang-btn" onclick="setLanguage('mix',this)">🌍 Mix</button>
+    <button class="lang-btn active" onclick="setLanguage('kr',this)">🇰🇷 KR</button>
+  </div>
+</div>
+
+<div id="progress-bar"><div id="progress-fill"></div></div>
+
+<div id="game-area">
+  <div id="overlay">
+    <h2>🍱 Food Typing Rush</h2>
+    <p>음식 이름을 타이핑하면<br>실제 음식으로 변해서 캐릭터 입으로 날아가요!<br><small style="color:#6b7280">✨ 단어 완성 시 이모지로 변신 → 입으로 쏙!</small></p>
+  </div>
+  <div class="miss-flash" id="miss-flash"></div>
+  <div id="character">
+    <span class="char-sweat">💧</span>
+    <div class="char-body">
+      <div class="char-eye l"></div>
+      <div class="char-eye r"></div>
+      <div class="char-cheek l"></div>
+      <div class="char-cheek r"></div>
+      <div class="char-mouth-outer">
+        <div class="char-teeth-top"></div>
+        <div class="char-tongue"></div>
+      </div>
+    </div>
+  </div>
+  <div id="speech-bubble">냠냠! 🤤</div>
+</div>
+
+<div id="input-area">
+  <input type="text" id="word-input" placeholder="START를 누르고 타이핑하세요..." autocomplete="off" spellcheck="false" disabled />
+  <button id="start-btn" onclick="startGame()">START</button>
+</div>
+
+<script>
+// ──────────── 이모지 매핑 ────────────
+const emojiMap = {
+  // Easy KR
+  '밥':'🍚','국':'🍲','떡':'🍡','죽':'🥣','면':'🍜',
+  '전':'🥞','탕':'🫕','김치':'🥬','된장':'🫙','만두':'🥟',
+  '순대':'🌭','어묵':'🍢','라면':'🍜','치킨':'🍗','잡채':'🍝',
+  '나물':'🥬','젓갈':'🦐','튀김':'🍤','찌개':'🍲','볶음':'🥘',
+  // Normal KR
+  '떡볶이':'🌶️','비빔밥':'🍱','삼겹살':'🥓','불고기':'🥩','갈비탕':'🍖',
+  '삼계탕':'🍗','냉면':'🍜','김밥':'🍱','순두부':'🫕','해물파전':'🥞',
+  '오징어볶음':'🦑','제육볶음':'🥩','된장찌개':'🍲','청국장':'🫕','콩나물국':'🌱',
+  // Hard KR
+  '낙지볶음':'🐙','순대국밥':'🥣','감자탕':'🥔','뼈해장국':'🦴','부대찌개':'🌭',
+  '닭갈비':'🍗','아구찜':'🐡','꽃게탕':'🦀','간장게장':'🦀','홍어삼합':'🐠',
+  '돼지국밥':'🍖','육개장':'🥩','추어탕':'🐟','도가니탕':'🦴','곱창전골':'🥘',
+  // Expert KR
+  '해물순두부찌개':'🦞','소갈비찜':'🍖','삼겹살구이':'🥓','오삼불고기':'🥩',
+  '낙지연포탕':'🐙','돼지갈비탕':'🍖','전복죽':'🐚','문어숙회':'🐙',
+  '꽃게매운탕':'🦀','홍어찜무침':'🐟',
+  // Easy EN
+  'rice':'🍚','soup':'🍲','cake':'🎂','taco':'🌮','sushi':'🍣',
+  'pizza':'🍕','toast':'🍞','bagel':'🥯','donut':'🍩','waffle':'🧇',
+  'salad':'🥗','bread':'🍞','pasta':'🍝','curry':'🍛','steak':'🥩',
+  'crepe':'🥞','mochi':'🍡','latte':'☕','bun':'🍞','pie':'🥧',
+  // Normal EN
+  'ramen':'🍜','burrito':'🌯','lasagna':'🍝','risotto':'🍚','goulash':'🥘',
+  'hummus':'🥙','falafel':'🧆','brownie':'🍫','churros':'🥐','brisket':'🥩',
+  'tempura':'🍤','poutine':'🍟','wonton':'🥟','gyoza':'🥟','tiramisu':'🍰',
+  // Hard EN
+  'carbonara':'🍝','bolognese':'🍝','shakshuka':'🍳','stroganoff':'🥘',
+  'moussaka':'🫕','gazpacho':'🍅','bruschetta':'🥖','prosciutto':'🥓',
+  'carpaccio':'🥩','tortellini':'🍝','ossobuco':'🍖','pappardelle':'🍝',
+  'bouillabaisse':'🦞','bibimbap':'🍱','croissant':'🥐',
+  // Expert EN
+  'pumpernickel':'🍞','ratatouille':'🫕','worcestershire':'🫙',
+  'boeufbourguignon':'🥩','chickenmarsala':'🍗','cremebrulee':'🍮',
+  'vichyssoise':'🥣','schmaltzherring':'🐟','sauerbraten':'🥩','wienerSchnitzel':'🍽️',
+};
+function getEmoji(word) { return emojiMap[word] || '🍽️'; }
+
+// ──────────── 단어 목록 ────────────
+const wordLists = {
+  easy: {
+    en: ['rice','soup','cake','taco','sushi','pizza','toast','bagel','donut','waffle',
+         'salad','bread','pasta','curry','steak','crepe','mochi','latte','bun','pie'],
+    kr: ['밥','국','떡','죽','면','전','탕','김치','된장','만두',
+         '순대','어묵','라면','치킨','잡채','나물','젓갈','튀김','찌개','볶음']
+  },
+  normal: {
+    en: ['ramen','burrito','lasagna','risotto','goulash','hummus','falafel','brownie',
+         'churros','brisket','tempura','poutine','wonton','gyoza','tiramisu'],
+    kr: ['떡볶이','비빔밥','삼겹살','불고기','갈비탕','삼계탕','냉면','김밥',
+         '순두부','해물파전','오징어볶음','제육볶음','된장찌개','청국장','콩나물국']
+  },
+  hard: {
+    en: ['carbonara','bolognese','shakshuka','stroganoff','moussaka','gazpacho',
+         'bruschetta','prosciutto','carpaccio','tortellini','ossobuco','pappardelle',
+         'bouillabaisse','bibimbap','croissant'],
+    kr: ['낙지볶음','순대국밥','감자탕','뼈해장국','부대찌개','닭갈비','아구찜',
+         '꽃게탕','간장게장','홍어삼합','돼지국밥','육개장','추어탕','도가니탕','곱창전골']
+  },
+  expert: {
+    en: ['pumpernickel','ratatouille','worcestershire','boeufbourguignon',
+         'chickenmarsala','cremebrulee','vichyssoise','schmaltzherring','sauerbraten','wienerSchnitzel'],
+    kr: ['해물순두부찌개','소갈비찜','삼겹살구이','오삼불고기','낙지연포탕',
+         '돼지갈비탕','전복죽','문어숙회','꽃게매운탕','홍어찜무침']
+  }
+};
+
+const speechLines = {
+  eat:   ['냠냠! 🤤','맛있다!','최고야!','굿!','더 줘!','😋','최고!'],
+  combo: ['콤보!🔥','연속타!','대박!','천재!','무적!','👑','신이다!'],
+  miss:  ['아...','놓쳤어...','😭','으윽...','배고파...'],
+};
+
+// ──────────── 상태 ────────────
+let difficulty = 'normal', language = 'kr';
+let activeWords = [];
+let score = 0, timeLeft = 60, wpm = 0;
+let totalTyped = 0, totalCorrect = 0, combo = 0, maxCombo = 0;
+let gameRunning = false;
+let timerInterval, spawnInterval, moveInterval;
+let isComposing = false;
+let charStateTimer = null, speechTimer = null;
+
+function setDifficulty(d, btn) {
+  difficulty = d;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setLanguage(l, btn) {
+  language = l;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function getWordPool() {
+  const l = wordLists[difficulty];
+  if (language === 'en') return [...l.en];
+  if (language === 'kr') return [...l.kr];
+  return [...l.en, ...l.kr];
+}
+function getDifficultySettings() {
+  return {
+    easy:   { spawnRate:3000, speed:0.25, wordTime:14000 },
+    normal: { spawnRate:2200, speed:0.42, wordTime:10000 },
+    hard:   { spawnRate:1600, speed:0.62, wordTime:7500  },
+    expert: { spawnRate:1100, speed:0.88, wordTime:5500  },
+  }[difficulty];
+}
+
+// ──────────── 캐릭터 상태 ────────────
+function setCharState(state, dur = 800) {
+  const c = document.getElementById('character');
+  c.classList.remove('eating','chewing','sad','combo','eating-bounce','miss-shake','danger-mode');
+  if (state === 'eating') {
+    c.classList.add('eating');
+    void c.offsetWidth;
+    c.classList.add('eating-bounce');
+    c.addEventListener('animationend', () => c.classList.remove('eating-bounce'), { once:true });
+  } else if (state === 'chewing') {
+    c.classList.add('chewing');
+    if (combo >= 3) c.classList.add('combo');
+  } else if (state === 'sad') {
+    c.classList.add('sad','miss-shake');
+    c.addEventListener('animationend', () => c.classList.remove('miss-shake'), { once:true });
+  }
+  clearTimeout(charStateTimer);
+  charStateTimer = setTimeout(() => {
+    c.classList.remove('eating','chewing','sad','combo');
+  }, dur);
+}
+function showSpeech(lines, dur = 1000) {
+  const el = document.getElementById('speech-bubble');
+  el.textContent = lines[Math.floor(Math.random() * lines.length)];
+  el.classList.add('visible');
+  clearTimeout(speechTimer);
+  speechTimer = setTimeout(() => el.classList.remove('visible'), dur);
+}
+function updateDangerMode() {
+  const c = document.getElementById('character');
+  if (activeWords.some(w => w.el.classList.contains('danger')))
+    c.classList.add('danger-mode');
+  else
+    c.classList.remove('danger-mode');
+}
+
+// ──────────── IME 초기화 ────────────
+function clearInputSafe() {
+  const el = document.getElementById('word-input');
+  isComposing = false;
+  el.value = '';
+  el.className = '';
+  el.blur();
+  el.focus();
+}
+
+// ──────────── 게임 ────────────
+function startGame() {
+  activeWords.forEach(w => w.el.remove());
+  activeWords = [];
+  score = 0; timeLeft = 60; wpm = 0;
+  totalTyped = 0; totalCorrect = 0; combo = 0; maxCombo = 0;
+  updateStats();
+
+  document.getElementById('overlay').style.display = 'none';
+  const inp = document.getElementById('word-input');
+  inp.disabled = false; inp.value = ''; inp.className = '';
+  inp.focus();
+  document.getElementById('start-btn').textContent = 'RESTART';
+  document.getElementById('progress-fill').style.width = '100%';
+  gameRunning = true;
+
+  const s = getDifficultySettings();
+  clearInterval(timerInterval); clearInterval(spawnInterval); clearInterval(moveInterval);
+
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    document.getElementById('timer').textContent = timeLeft;
+    document.getElementById('progress-fill').style.width = ((timeLeft/60)*100)+'%';
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+
+  spawnInterval = setInterval(spawnWord, s.spawnRate);
+  moveInterval  = setInterval(moveWords, 50);
+  spawnWord();
+}
+function endGame() {
+  gameRunning = false;
+  clearInterval(timerInterval); clearInterval(spawnInterval); clearInterval(moveInterval);
+  document.getElementById('word-input').disabled = true;
+  const acc = totalTyped > 0 ? Math.round((totalCorrect/totalTyped)*100) : 0;
+  const ol = document.getElementById('overlay');
+  ol.style.display = 'flex';
+  ol.innerHTML = `
+    <h2>⏱ Time's Up!</h2>
+    <p>
+      <span class="result">🏆 Score: <strong>${score}</strong></span><br>
+      ⌨️ WPM: <strong>${wpm}</strong> &nbsp;|&nbsp; 🎯 Accuracy: <strong>${acc}%</strong><br>
+      🔥 Max Combo: <strong>${maxCombo}</strong> &nbsp;|&nbsp; ✅ Words: <strong>${totalCorrect}/${totalTyped}</strong>
+    </p>
+    <p style="margin-top:16px;color:#6b7280;font-size:.85rem;">RESTART를 눌러 다시 플레이!</p>`;
+}
+
+function spawnWord() {
+  if (!gameRunning) return;
+  const s = getDifficultySettings();
+  const ga = document.getElementById('game-area');
+  const pool = getWordPool();
+  const word = pool[Math.floor(Math.random() * pool.length)];
+  const el = document.createElement('div');
+  el.className = 'word';
+  el.textContent = word;
+  ga.appendChild(el);
+  el.style.left = (20 + Math.random() * (ga.offsetWidth - 180)) + 'px';
+  el.style.top = '-40px';
+  activeWords.push({ word, el, y:-40,
+    speed: s.speed + Math.random()*0.2,
+    startTime: Date.now(), duration: s.wordTime });
+}
+function moveWords() {
+  if (!gameRunning) return;
+  const maxY = document.getElementById('game-area').offsetHeight - 84;
+  const now = Date.now();
+  let hadMiss = false;
+  activeWords = activeWords.filter(obj => {
+    obj.y += obj.speed;
+    if ((now - obj.startTime) / obj.duration > 0.65) obj.el.classList.add('danger');
+    if (obj.y > maxY) {
+      obj.el.remove(); combo = 0; hadMiss = true;
+      updateStats(); flashMiss(); return false;
+    }
+    obj.el.style.top = obj.y + 'px';
+    return true;
+  });
+  if (hadMiss) { setCharState('sad', 600); showSpeech(speechLines.miss, 800); }
+  updateDangerMode();
+}
+function flashMiss() {
+  const f = document.getElementById('miss-flash');
+  f.style.opacity = '1';
+  setTimeout(() => f.style.opacity = '0', 300);
+}
+
+// ──────────── ✨ 스파클 ────────────
+function addSparkles(cx, cy) {
+  const ga = document.getElementById('game-area');
+  ['✨','⭐','💫','🌟','✨','💫'].forEach((s, i) => {
+    const el = document.createElement('div');
+    const angle = (i/6)*Math.PI*2 + Math.random()*0.6;
+    const dist  = 22 + Math.random()*20;
+    el.style.cssText = `position:absolute;font-size:${11+Math.random()*7}px;
+      left:${cx-8}px;top:${cy-8}px;pointer-events:none;z-index:26;`;
+    el.textContent = s;
+    ga.appendChild(el);
+    el.animate([
+      { transform:'translate(0,0) scale(.4)', opacity:1 },
+      { transform:`translate(${Math.cos(angle)*dist}px,${Math.sin(angle)*dist}px) scale(1.3)`, opacity:0 }
+    ], { duration:380, easing:'ease-out', fill:'forwards' }).onfinish = () => el.remove();
+  });
+}
+
+// ──────────── 텍스트 → 이모지 변환 후 입으로 날아가기 ────────────
+function transformAndFly(wordEl, word, onArrival) {
+  const emoji = getEmoji(word);
+  const ga    = document.getElementById('game-area');
+  const rect  = wordEl.getBoundingClientRect();
+  const aRect = ga.getBoundingClientRect();
+  const cx = rect.left - aRect.left + rect.width  / 2;
+  const cy = rect.top  - aRect.top  + rect.height / 2;
+
+  // 1. 단어 텍스트: 빛나면서 사라짐
+  wordEl.animate([
+    { transform:'scale(1)',   opacity:1, filter:'brightness(1)' },
+    { transform:'scale(1.25)',opacity:1, filter:'brightness(4)', offset:0.35 },
+    { transform:'scale(0)',   opacity:0, filter:'brightness(2)' }
+  ], { duration:220, fill:'forwards' }).onfinish = () => wordEl.remove();
+
+  // 2. 스파클 폭발
+  addSparkles(cx, cy);
+
+  // 3. 이모지 등장 (약간 딜레이)
+  setTimeout(() => {
+    const emojiEl = document.createElement('div');
+    emojiEl.style.cssText = `
+      position:absolute; font-size:2.4rem; line-height:1;
+      left:${cx-20}px; top:${cy-20}px;
+      z-index:25; pointer-events:none;
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,.5));
+    `;
+    emojiEl.textContent = emoji;
+    ga.appendChild(emojiEl);
+
+    // 이모지 팝인 애니메이션
+    const popAnim = emojiEl.animate([
+      { transform:'scale(0) rotate(-30deg)', opacity:0 },
+      { transform:'scale(1.45) rotate(12deg)', opacity:1, offset:.5 },
+      { transform:'scale(1) rotate(0deg)',    opacity:1 }
+    ], { duration:270, easing:'ease-out', fill:'forwards' });
+
+    popAnim.onfinish = () => flyEmojiToMouth(emojiEl, onArrival);
+  }, 140);
+}
+
+function flyEmojiToMouth(emojiEl, onArrival) {
+  const ga    = document.getElementById('game-area');
+  const char  = document.getElementById('character');
+  const eRect = emojiEl.getBoundingClientRect();
+  const aRect = ga.getBoundingClientRect();
+  const cRect = char.getBoundingClientRect();
+
+  const sx = eRect.left - aRect.left;
+  const sy = eRect.top  - aRect.top;
+  const tx = cRect.left - aRect.left + cRect.width/2  - eRect.width/2;
+  const ty = cRect.top  - aRect.top  + cRect.height*.55;
+  const dx = tx - sx, dy = ty - sy;
+
+  // 포물선 중간점
+  const mx = dx*.5 + (Math.random()-.5)*50;
+  const my = dy*.38 - 22;
+
+  // 입 벌리기 (음식 도착 직전)
+  setTimeout(() => setCharState('eating', 550), 160);
+
+  const anim = emojiEl.animate([
+    { transform:'translate(0,0) scale(1)',              opacity:1,   offset:0    },
+    { transform:`translate(${mx}px,${my}px) scale(1.15)`, opacity:1, offset:0.42 },
+    { transform:`translate(${dx}px,${dy}px) scale(0.08)`, opacity:.4, offset:1   }
+  ], { duration:420, easing:'cubic-bezier(.4,0,.7,1)', fill:'forwards' });
+
+  anim.onfinish = () => {
+    emojiEl.remove();
+    if (onArrival) onArrival();
+  };
+}
+
+// ──────────── 매칭 ────────────
+function handleMatch(idx) {
+  totalTyped++; totalCorrect++;
+  combo++; maxCombo = Math.max(maxCombo, combo);
+  score += 10 + (combo > 1 ? combo*2 : 0);
+  const matched = activeWords[idx];
+  activeWords.splice(idx, 1);
+  activeWords.forEach(w => { w.el.innerHTML = w.word; w.el.style.borderColor = ''; });
+  updateStats();
+  clearInputSafe();
+
+  transformAndFly(matched.el, matched.word, () => {
+    setCharState('chewing', 900);
+    showSpeech(combo >= 4 ? speechLines.combo : speechLines.eat, 900);
+  });
+}
+
+// ──────────── 입력 처리 ────────────
+const inp = document.getElementById('word-input');
+
+inp.addEventListener('compositionstart', () => { isComposing = true; });
+
+inp.addEventListener('compositionupdate', function() {
+  if (!gameRunning) return;
+  const el = this;
+  setTimeout(() => {
+    const val = el.value.trim();
+    updateHighlights(val);
+    const idx = activeWords.findIndex(w => w.word === val);
+    if (idx !== -1) handleMatch(idx);
+  }, 0);
+});
+
+inp.addEventListener('compositionend', function() {
+  isComposing = false;
+  const el = this;
+  setTimeout(() => {
+    if (!gameRunning) return;
+    const val = el.value.trim();
+    const idx = activeWords.findIndex(w => w.word === val);
+    if (idx !== -1) { handleMatch(idx); return; }
+    updateHighlights(val);
+    el.className = val==='' ? '' : (activeWords.some(w=>w.word.startsWith(val)) ? 'correct' : 'wrong');
+  }, 0);
+});
+
+inp.addEventListener('input', function(e) {
+  if (!gameRunning) return;
+  if (isComposing) { updateHighlights(this.value.trim()); return; }
+  const val = this.value.trim();
+  const idx = activeWords.findIndex(w => w.word === val);
+  if (idx !== -1) { handleMatch(idx); return; }
+  this.className = val==='' ? '' : (activeWords.some(w=>w.word.startsWith(val)) ? 'correct' : 'wrong');
+  updateHighlights(val);
+});
+
+inp.addEventListener('keydown', function(e) {
+  if ((e.key===' '||e.key==='Enter') && !isComposing) {
+    e.preventDefault();
+    const val = this.value.trim();
+    if (!val || !gameRunning) return;
+    const idx = activeWords.findIndex(w => w.word === val);
+    if (idx !== -1) { handleMatch(idx); return; }
+    totalTyped++; combo = 0;
+    this.className = 'wrong';
+    setTimeout(() => this.className = '', 400);
+    this.value = ''; updateStats();
+  }
+});
+
+function updateHighlights(val) {
+  activeWords.forEach(w => {
+    if (val.length > 0 && w.word.startsWith(val)) {
+      w.el.innerHTML = `<span style="color:#a78bfa;text-shadow:0 0 8px #a78bfa;">${w.word.slice(0,val.length)}</span>${w.word.slice(val.length)}`;
+      w.el.style.borderColor = '#a78bfa';
+    } else {
+      w.el.innerHTML = w.word; w.el.style.borderColor = '';
+    }
+  });
+}
+
+function updateStats() {
+  document.getElementById('score').textContent  = score;
+  document.getElementById('timer').textContent  = timeLeft;
+  const elapsed = (60-timeLeft)||1;
+  wpm = Math.round((totalCorrect/elapsed)*60);
+  document.getElementById('wpm').textContent     = wpm;
+  const acc = totalTyped>0 ? Math.round((totalCorrect/totalTyped)*100) : 100;
+  document.getElementById('accuracy').textContent = acc+'%';
+  document.getElementById('combo').textContent   = combo;
+}
+</script>
+</body>
+</html>
