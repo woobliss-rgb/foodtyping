@@ -28,7 +28,6 @@
     margin-bottom: 16px;
   }
 
-  /* 낙하 단어 */
   .word {
     position: absolute;
     font-size: 1rem; font-weight: 600;
@@ -47,7 +46,6 @@
     75%      { transform: translateX(3px); }
   }
 
-  /* ── 캐릭터 ── */
   #character {
     position: absolute; bottom: 5px; left: 50%;
     transform: translateX(-50%);
@@ -131,7 +129,6 @@
     border-radius:24px 24px 0 0; bottom:4px; height:12px; transform:scaleX(.8);
   }
 
-  /* 말풍선 */
   #speech-bubble {
     position:absolute; bottom:88px; left:50%;
     transform:translateX(-50%);
@@ -148,7 +145,6 @@
   }
   #speech-bubble.visible { opacity:1; }
 
-  /* UI */
   #input-area { display:flex; gap:10px; width:700px; }
   #word-input {
     flex:1; padding:14px 20px; font-size:1.2rem;
@@ -209,6 +205,64 @@
     background:linear-gradient(90deg,#7c3aed,#a78bfa);
     width:100%; transition:width 1s linear;
   }
+
+  /* ── 리더보드 ── */
+  #leaderboard {
+    width: 700px; margin-top: 24px;
+    background: #1a1a2e; border: 1px solid #2d2d4e;
+    border-radius: 12px; padding: 20px;
+  }
+  #leaderboard h3 {
+    color: #a78bfa; font-size: 1.1rem; margin-bottom: 14px;
+    letter-spacing: 1px; text-align: center;
+  }
+  .lb-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: 8px;
+    margin-bottom: 6px; background: #0f0f1a;
+    font-size: 0.9rem;
+  }
+  .lb-row.top1 { background: #3b2a0a; border: 1px solid #f59e0b; }
+  .lb-row.top2 { background: #1a2035; border: 1px solid #6b7280; }
+  .lb-row.top3 { background: #1a1a2e; border: 1px solid #b45309; }
+  .lb-rank { width: 28px; font-weight: bold; color: #6b7280; text-align: center; }
+  .lb-name { flex: 1; color: #e5e7eb; }
+  .lb-score { font-weight: bold; color: #a78bfa; width: 60px; text-align: right; }
+  .lb-wpm   { color: #6b7280; font-size: 0.8rem; width: 70px; text-align: right; }
+  .lb-diff  { font-size: 0.75rem; color: #4c1d95; background: #2d2d4e;
+               padding: 2px 8px; border-radius: 10px; }
+  #lb-loading { text-align: center; color: #6b7280; padding: 20px; font-size: 0.9rem; }
+
+  /* ── 점수 저장 모달 ── */
+  #save-modal {
+    display: none; position: fixed; inset: 0;
+    background: #0f0f1acc; z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  #save-modal.open { display: flex; }
+  #save-modal-box {
+    background: #1a1a2e; border: 1px solid #4c1d95;
+    border-radius: 16px; padding: 32px; width: 340px;
+    text-align: center;
+  }
+  #save-modal-box h3 { color: #a78bfa; margin-bottom: 6px; font-size: 1.2rem; }
+  #save-modal-box .modal-score { font-size: 2rem; font-weight: bold; color: #fff; margin: 10px 0; }
+  #save-modal-box input {
+    width: 100%; padding: 12px 16px; font-size: 1rem;
+    background: #0f0f1a; border: 2px solid #4c1d95;
+    border-radius: 8px; color: #fff; outline: none; margin: 12px 0;
+    font-family: 'Segoe UI', sans-serif; text-align: center;
+  }
+  #save-modal-box input:focus { border-color: #a78bfa; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 8px; }
+  .modal-btns button {
+    flex: 1; padding: 12px; border: none; border-radius: 8px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  }
+  #modal-save-btn { background: #7c3aed; color: #fff; }
+  #modal-save-btn:hover { background: #6d28d9; }
+  #modal-skip-btn { background: #2d2d4e; color: #9ca3af; }
+  #modal-skip-btn:hover { background: #374151; }
 </style>
 </head>
 <body>
@@ -269,48 +323,133 @@
   <button id="start-btn" onclick="startGame()">START</button>
 </div>
 
+<!-- 리더보드 -->
+<div id="leaderboard">
+  <h3>🏆 LEADERBOARD</h3>
+  <div id="lb-list"><div id="lb-loading">불러오는 중...</div></div>
+</div>
+
+<!-- 점수 저장 모달 -->
+<div id="save-modal">
+  <div id="save-modal-box">
+    <h3>⏱ 게임 종료!</h3>
+    <div class="modal-score" id="modal-score-display">0</div>
+    <div style="color:#9ca3af;font-size:.85rem;margin-bottom:4px;">닉네임을 입력하고 점수를 등록하세요</div>
+    <input type="text" id="nickname-input" placeholder="닉네임 (최대 10자)" maxlength="10" autocomplete="off" spellcheck="false" />
+    <div class="modal-btns">
+      <button id="modal-save-btn" onclick="saveScore()">등록하기</button>
+      <button id="modal-skip-btn" onclick="closeModal()">건너뛰기</button>
+    </div>
+    <div id="modal-error" style="color:#f87171;font-size:.8rem;margin-top:8px;min-height:18px;"></div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCi48rkKPcLT6nOSRD0jdfTnSyh1iHI_nM",
+  authDomain: "hstyping-d828a.firebaseapp.com",
+  projectId: "hstyping-d828a",
+  storageBucket: "hstyping-d828a.firebasestorage.app",
+  messagingSenderId: "795195932519",
+  appId: "1:795195932519:web:7d387b2d9aed18cd4879c2"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// 리더보드 불러오기
+async function loadLeaderboard() {
+  const list = document.getElementById('lb-list');
+  try {
+    const q = query(collection(db, 'scores'), orderBy('score','desc'), limit(10));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      list.innerHTML = '<div id="lb-loading">아직 기록이 없어요. 첫 번째 주인공이 되세요! 🎉</div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    list.innerHTML = '';
+    snap.forEach((doc, i) => {
+      const d = doc.data();
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (i===0?' top1':i===1?' top2':i===2?' top3':'');
+      row.innerHTML = `
+        <span class="lb-rank">${medals[i] || (i+1)}</span>
+        <span class="lb-name">${escapeHtml(d.name)}</span>
+        <span class="lb-diff">${d.difficulty||''} ${d.language||''}</span>
+        <span class="lb-wpm">${d.wpm||0} WPM</span>
+        <span class="lb-score">${d.score}</span>
+      `;
+      list.appendChild(row);
+    });
+  } catch(e) {
+    list.innerHTML = `<div id="lb-loading" style="color:#f87171">
+      오류: ${e.code || e.message}<br>
+      <span style="color:#6b7280;font-size:.8rem">Firebase Console → Firestore → Rules → Publish 했는지 확인하세요</span><br>
+      <button onclick="window._loadLeaderboard()" style="margin-top:8px;padding:6px 14px;background:#7c3aed;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:.85rem">🔄 다시 시도</button>
+    </div>`;
+  }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 점수 저장
+window._saveScoreFn = async function(name, scoreVal, wpmVal, accVal, maxComboVal) {
+  await addDoc(collection(db, 'scores'), {
+    name, score: scoreVal, wpm: wpmVal,
+    accuracy: accVal, maxCombo: maxComboVal,
+    difficulty: window._difficulty || 'normal',
+    language: window._language || 'kr',
+    createdAt: serverTimestamp()
+  });
+  await loadLeaderboard();
+};
+
+loadLeaderboard();
+window._loadLeaderboard = loadLeaderboard;
+</script>
+
 <script>
 // ──────────── 이모지 매핑 ────────────
 const emojiMap = {
-  // Easy KR
   '밥':'🍚','국':'🍲','떡':'🍡','죽':'🥣','면':'🍜',
   '전':'🥞','탕':'🫕','김치':'🥬','된장':'🫙','만두':'🥟',
   '순대':'🌭','어묵':'🍢','라면':'🍜','치킨':'🍗','잡채':'🍝',
   '나물':'🥬','젓갈':'🦐','튀김':'🍤','찌개':'🍲','볶음':'🥘',
-  // Normal KR
   '떡볶이':'🌶️','비빔밥':'🍱','삼겹살':'🥓','불고기':'🥩','갈비탕':'🍖',
   '삼계탕':'🍗','냉면':'🍜','김밥':'🍱','순두부':'🫕','해물파전':'🥞',
   '오징어볶음':'🦑','제육볶음':'🥩','된장찌개':'🍲','청국장':'🫕','콩나물국':'🌱',
-  // Hard KR
   '낙지볶음':'🐙','순대국밥':'🥣','감자탕':'🥔','뼈해장국':'🦴','부대찌개':'🌭',
   '닭갈비':'🍗','아구찜':'🐡','꽃게탕':'🦀','간장게장':'🦀','홍어삼합':'🐠',
   '돼지국밥':'🍖','육개장':'🥩','추어탕':'🐟','도가니탕':'🦴','곱창전골':'🥘',
-  // Expert KR
   '해물순두부찌개':'🦞','소갈비찜':'🍖','삼겹살구이':'🥓','오삼불고기':'🥩',
   '낙지연포탕':'🐙','돼지갈비탕':'🍖','전복죽':'🐚','문어숙회':'🐙',
   '꽃게매운탕':'🦀','홍어찜무침':'🐟',
-  // Easy EN
   'rice':'🍚','soup':'🍲','cake':'🎂','taco':'🌮','sushi':'🍣',
   'pizza':'🍕','toast':'🍞','bagel':'🥯','donut':'🍩','waffle':'🧇',
   'salad':'🥗','bread':'🍞','pasta':'🍝','curry':'🍛','steak':'🥩',
   'crepe':'🥞','mochi':'🍡','latte':'☕','bun':'🍞','pie':'🥧',
-  // Normal EN
   'ramen':'🍜','burrito':'🌯','lasagna':'🍝','risotto':'🍚','goulash':'🥘',
   'hummus':'🥙','falafel':'🧆','brownie':'🍫','churros':'🥐','brisket':'🥩',
   'tempura':'🍤','poutine':'🍟','wonton':'🥟','gyoza':'🥟','tiramisu':'🍰',
-  // Hard EN
   'carbonara':'🍝','bolognese':'🍝','shakshuka':'🍳','stroganoff':'🥘',
   'moussaka':'🫕','gazpacho':'🍅','bruschetta':'🥖','prosciutto':'🥓',
   'carpaccio':'🥩','tortellini':'🍝','ossobuco':'🍖','pappardelle':'🍝',
   'bouillabaisse':'🦞','bibimbap':'🍱','croissant':'🥐',
-  // Expert EN
   'pumpernickel':'🍞','ratatouille':'🫕','worcestershire':'🫙',
   'boeufbourguignon':'🥩','chickenmarsala':'🍗','cremebrulee':'🍮',
   'vichyssoise':'🥣','schmaltzherring':'🐟','sauerbraten':'🥩','wienerSchnitzel':'🍽️',
 };
 function getEmoji(word) { return emojiMap[word] || '🍽️'; }
 
-// ──────────── 단어 목록 ────────────
 const wordLists = {
   easy: {
     en: ['rice','soup','cake','taco','sushi','pizza','toast','bagel','donut','waffle',
@@ -345,8 +484,9 @@ const speechLines = {
   miss:  ['아...','놓쳤어...','😭','으윽...','배고파...'],
 };
 
-// ──────────── 상태 ────────────
 let difficulty = 'normal', language = 'kr';
+window._difficulty = difficulty;
+window._language   = language;
 let activeWords = [];
 let score = 0, timeLeft = 60, wpm = 0;
 let totalTyped = 0, totalCorrect = 0, combo = 0, maxCombo = 0;
@@ -354,14 +494,15 @@ let gameRunning = false;
 let timerInterval, spawnInterval, moveInterval;
 let isComposing = false;
 let charStateTimer = null, speechTimer = null;
+let _finalScore = 0, _finalWpm = 0, _finalAcc = 0, _finalCombo = 0;
 
 function setDifficulty(d, btn) {
-  difficulty = d;
+  difficulty = d; window._difficulty = d;
   document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
 function setLanguage(l, btn) {
-  language = l;
+  language = l; window._language = l;
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
@@ -380,7 +521,6 @@ function getDifficultySettings() {
   }[difficulty];
 }
 
-// ──────────── 캐릭터 상태 ────────────
 function setCharState(state, dur = 800) {
   const c = document.getElementById('character');
   c.classList.remove('eating','chewing','sad','combo','eating-bounce','miss-shake','danger-mode');
@@ -416,7 +556,6 @@ function updateDangerMode() {
     c.classList.remove('danger-mode');
 }
 
-// ──────────── IME 초기화 ────────────
 function clearInputSafe() {
   const el = document.getElementById('word-input');
   isComposing = false;
@@ -426,7 +565,6 @@ function clearInputSafe() {
   el.focus();
 }
 
-// ──────────── 게임 ────────────
 function startGame() {
   activeWords.forEach(w => w.el.remove());
   activeWords = [];
@@ -456,11 +594,16 @@ function startGame() {
   moveInterval  = setInterval(moveWords, 50);
   spawnWord();
 }
+
 function endGame() {
   gameRunning = false;
   clearInterval(timerInterval); clearInterval(spawnInterval); clearInterval(moveInterval);
   document.getElementById('word-input').disabled = true;
+
   const acc = totalTyped > 0 ? Math.round((totalCorrect/totalTyped)*100) : 0;
+  _finalScore = score; _finalWpm = wpm; _finalAcc = acc; _finalCombo = maxCombo;
+
+  // 결과 오버레이
   const ol = document.getElementById('overlay');
   ol.style.display = 'flex';
   ol.innerHTML = `
@@ -471,7 +614,42 @@ function endGame() {
       🔥 Max Combo: <strong>${maxCombo}</strong> &nbsp;|&nbsp; ✅ Words: <strong>${totalCorrect}/${totalTyped}</strong>
     </p>
     <p style="margin-top:16px;color:#6b7280;font-size:.85rem;">RESTART를 눌러 다시 플레이!</p>`;
+
+  // 점수 저장 모달
+  document.getElementById('modal-score-display').textContent = score + '점';
+  document.getElementById('nickname-input').value = '';
+  document.getElementById('modal-error').textContent = '';
+  document.getElementById('save-modal').classList.add('open');
+  setTimeout(() => document.getElementById('nickname-input').focus(), 100);
 }
+
+window.saveScore = async function() {
+  const name = document.getElementById('nickname-input').value.trim();
+  if (!name) {
+    document.getElementById('modal-error').textContent = '닉네임을 입력해주세요!';
+    return;
+  }
+  const btn = document.getElementById('modal-save-btn');
+  btn.textContent = '저장 중...'; btn.disabled = true;
+  try {
+    if (window._saveScoreFn) {
+      await window._saveScoreFn(name, _finalScore, _finalWpm, _finalAcc, _finalCombo);
+    }
+    closeModal();
+  } catch(e) {
+    document.getElementById('modal-error').textContent = '저장 실패. 다시 시도해주세요.';
+    btn.textContent = '등록하기'; btn.disabled = false;
+  }
+};
+
+window.closeModal = function() {
+  document.getElementById('save-modal').classList.remove('open');
+};
+
+// Enter 키로 저장
+document.getElementById('nickname-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') window.saveScore();
+});
 
 function spawnWord() {
   if (!gameRunning) return;
@@ -513,7 +691,6 @@ function flashMiss() {
   setTimeout(() => f.style.opacity = '0', 300);
 }
 
-// ──────────── ✨ 스파클 ────────────
 function addSparkles(cx, cy) {
   const ga = document.getElementById('game-area');
   ['✨','⭐','💫','🌟','✨','💫'].forEach((s, i) => {
@@ -531,7 +708,6 @@ function addSparkles(cx, cy) {
   });
 }
 
-// ──────────── 텍스트 → 이모지 변환 후 입으로 날아가기 ────────────
 function transformAndFly(wordEl, word, onArrival) {
   const emoji = getEmoji(word);
   const ga    = document.getElementById('game-area');
@@ -540,17 +716,14 @@ function transformAndFly(wordEl, word, onArrival) {
   const cx = rect.left - aRect.left + rect.width  / 2;
   const cy = rect.top  - aRect.top  + rect.height / 2;
 
-  // 1. 단어 텍스트: 빛나면서 사라짐
   wordEl.animate([
     { transform:'scale(1)',   opacity:1, filter:'brightness(1)' },
     { transform:'scale(1.25)',opacity:1, filter:'brightness(4)', offset:0.35 },
     { transform:'scale(0)',   opacity:0, filter:'brightness(2)' }
   ], { duration:220, fill:'forwards' }).onfinish = () => wordEl.remove();
 
-  // 2. 스파클 폭발
   addSparkles(cx, cy);
 
-  // 3. 이모지 등장 (약간 딜레이)
   setTimeout(() => {
     const emojiEl = document.createElement('div');
     emojiEl.style.cssText = `
@@ -562,7 +735,6 @@ function transformAndFly(wordEl, word, onArrival) {
     emojiEl.textContent = emoji;
     ga.appendChild(emojiEl);
 
-    // 이모지 팝인 애니메이션
     const popAnim = emojiEl.animate([
       { transform:'scale(0) rotate(-30deg)', opacity:0 },
       { transform:'scale(1.45) rotate(12deg)', opacity:1, offset:.5 },
@@ -586,11 +758,9 @@ function flyEmojiToMouth(emojiEl, onArrival) {
   const ty = cRect.top  - aRect.top  + cRect.height*.55;
   const dx = tx - sx, dy = ty - sy;
 
-  // 포물선 중간점
   const mx = dx*.5 + (Math.random()-.5)*50;
   const my = dy*.38 - 22;
 
-  // 입 벌리기 (음식 도착 직전)
   setTimeout(() => setCharState('eating', 550), 160);
 
   const anim = emojiEl.animate([
@@ -605,7 +775,6 @@ function flyEmojiToMouth(emojiEl, onArrival) {
   };
 }
 
-// ──────────── 매칭 ────────────
 function handleMatch(idx) {
   totalTyped++; totalCorrect++;
   combo++; maxCombo = Math.max(maxCombo, combo);
@@ -622,7 +791,6 @@ function handleMatch(idx) {
   });
 }
 
-// ──────────── 입력 처리 ────────────
 const inp = document.getElementById('word-input');
 
 inp.addEventListener('compositionstart', () => { isComposing = true; });
